@@ -258,6 +258,64 @@ _installUbuntuPackages() {
     fi
 }
 
+_installDebianPackages() {
+    export DEBIAN_FRONTEND="noninteractive"
+    apt-get -y update
+    apt-get -y install --no-install-recommends \
+        bison \
+        curl \
+        flex \
+        help2man \
+        libfl-dev \
+        libfl2 \
+        libgit2-dev \
+        libgoogle-perftools-dev \
+        libqt5multimediawidgets5 \
+        libqt5opengl5 \
+        libqt5svg5-dev \
+        libqt5xmlpatterns5-dev \
+        libz-dev \
+        perl \
+        python3-pip \
+        python3-venv \
+        qtmultimedia5-dev \
+        qttools5-dev \
+        ruby \
+        ruby-dev \
+        time \
+        zlib1g \
+        zlib1g-dev
+
+    # Install KLayout from Debian repos
+    apt-get -y install --no-install-recommends klayout python3-pandas \
+        || echo "WARNING: KLayout not available via apt. Please install manually."
+
+    if command -v docker &> /dev/null; then
+        echo "Docker is already installed, skip docker reinstall."
+        return 0
+    fi
+
+    # Add Docker's official GPG key:
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/debian/gpg \
+        -o /etc/apt/keyrings/docker.asc
+    chmod a+r /etc/apt/keyrings/docker.asc
+
+    # Add the Debian Docker repository
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian \
+        $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+        tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+    apt-get -y update
+    apt-get -y install --no-install-recommends \
+        docker-ce \
+        docker-ce-cli \
+        containerd.io \
+        docker-buildx-plugin \
+        docker-compose-plugin \
+        || echo "WARNING: Docker installation failed. You may need to install Docker manually."
+}
+
 _installDarwinPackages() {
     brew install libffi tcl-tk ruby
     brew install python libomp doxygen capnp tbb bison flex boost spdlog zlib
@@ -481,6 +539,23 @@ case "${os}" in
             else
                 echo "Skip common for rodete"
             fi
+        fi
+        ;;
+    "Debian GNU/Linux" | "Kali GNU/Linux" )
+        version=$(awk -F= '/^VERSION_ID/{print $2}' /etc/os-release | sed 's/"//g')
+        if [[ -z ${version} ]]; then
+            version=$(awk -F= '/^VERSION_CODENAME/{print $2}' /etc/os-release | sed 's/"//g')
+        fi
+        if [[ ${CI} == "yes" ]]; then
+            echo "WARNING: Installing CI dependencies is only supported on Ubuntu 22.04" >&2
+        fi
+        _installORDependencies
+        if [[ "${option}" == "base" || "${option}" == "all" ]]; then
+            _installDebianPackages
+            _installUbuntuCleanUp
+        fi
+        if [[ "${option}" == "common" || "${option}" == "all" ]]; then
+            _installPipCommon
         fi
         ;;
     "Darwin" )
