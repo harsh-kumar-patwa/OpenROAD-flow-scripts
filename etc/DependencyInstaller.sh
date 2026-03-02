@@ -148,6 +148,10 @@ _installKlayoutDependenciesUbuntuAarch64() {
 }
 
 _installUbuntuPackages() {
+    # Detect distro for Docker repo URL and KLayout install method
+    local distro_id
+    distro_id=$(. /etc/os-release && echo "${ID}")
+
     export DEBIAN_FRONTEND="noninteractive"
     apt-get -y update
     apt-get -y install --no-install-recommends \
@@ -175,19 +179,23 @@ _installUbuntuPackages() {
         zlib1g \
         zlib1g-dev
 
-    packages=()
-    # Choose libstdc++ version
-    if _versionCompare $1 -ge 25.04; then
-        packages+=("libstdc++-15-dev")
-    elif _versionCompare $1 -ge 24.04; then
-        packages+=("libstdc++-14-dev")
-    elif _versionCompare $1 -ge 22.10; then
-        packages+=("libstdc++-12-dev")
+    # Choose libstdc++ version (Ubuntu-specific versioned packages)
+    if [[ "$distro_id" == "ubuntu" ]]; then
+        packages=()
+        if _versionCompare $1 -ge 25.04; then
+            packages+=("libstdc++-15-dev")
+        elif _versionCompare $1 -ge 24.04; then
+            packages+=("libstdc++-14-dev")
+        elif _versionCompare $1 -ge 22.10; then
+            packages+=("libstdc++-12-dev")
+        fi
+        apt-get install -y --no-install-recommends ${packages[@]}
     fi
-    apt-get install -y --no-install-recommends ${packages[@]}
 
     # install KLayout
-    if  [[ $1 == "rodete" ]]; then
+    # Debian/Kali and rodete use apt; Ubuntu >= 23.04 uses apt;
+    # older Ubuntu uses version-specific .deb downloads
+    if [[ $1 == "rodete" ]] || [[ "$distro_id" != "ubuntu" ]]; then
         apt-get -y install --no-install-recommends klayout python3-pandas
     elif _versionCompare "$1" -ge 23.04; then
         apt-get -y install --no-install-recommends klayout python3-pandas
@@ -236,14 +244,20 @@ _installUbuntuPackages() {
         return 0
     fi
 
+    # Determine Docker repo distro (Kali uses Debian repos)
+    local docker_distro="$distro_id"
+    if [[ "$distro_id" == "kali" ]]; then
+        docker_distro="debian"
+    fi
+
     # Add Docker's official GPG key:
     install -m 0755 -d /etc/apt/keyrings
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+    curl -fsSL https://download.docker.com/linux/${docker_distro}/gpg \
         -o /etc/apt/keyrings/docker.asc
     chmod a+r /etc/apt/keyrings/docker.asc
 
     # Add the repository to Apt sources:
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/${docker_distro} \
         $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
         tee /etc/apt/sources.list.d/docker.list > /dev/null
 
@@ -256,64 +270,6 @@ _installUbuntuPackages() {
             docker-buildx-plugin \
             docker-compose-plugin
     fi
-}
-
-_installDebianPackages() {
-    export DEBIAN_FRONTEND="noninteractive"
-    apt-get -y update
-    apt-get -y install --no-install-recommends \
-        bison \
-        curl \
-        flex \
-        help2man \
-        libfl-dev \
-        libfl2 \
-        libgit2-dev \
-        libgoogle-perftools-dev \
-        libqt5multimediawidgets5 \
-        libqt5opengl5 \
-        libqt5svg5-dev \
-        libqt5xmlpatterns5-dev \
-        libz-dev \
-        perl \
-        python3-pip \
-        python3-venv \
-        qtmultimedia5-dev \
-        qttools5-dev \
-        ruby \
-        ruby-dev \
-        time \
-        zlib1g \
-        zlib1g-dev
-
-    # Install KLayout from Debian repos
-    apt-get -y install --no-install-recommends klayout python3-pandas \
-        || echo "WARNING: KLayout not available via apt. Please install manually."
-
-    if command -v docker &> /dev/null; then
-        echo "Docker is already installed, skip docker reinstall."
-        return 0
-    fi
-
-    # Add Docker's official GPG key:
-    install -m 0755 -d /etc/apt/keyrings
-    curl -fsSL https://download.docker.com/linux/debian/gpg \
-        -o /etc/apt/keyrings/docker.asc
-    chmod a+r /etc/apt/keyrings/docker.asc
-
-    # Add the Debian Docker repository
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian \
-        $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-        tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-    apt-get -y update
-    apt-get -y install --no-install-recommends \
-        docker-ce \
-        docker-ce-cli \
-        containerd.io \
-        docker-buildx-plugin \
-        docker-compose-plugin \
-        || echo "WARNING: Docker installation failed. You may need to install Docker manually."
 }
 
 _installDarwinPackages() {
@@ -551,7 +507,7 @@ case "${os}" in
         fi
         _installORDependencies
         if [[ "${option}" == "base" || "${option}" == "all" ]]; then
-            _installDebianPackages
+            _installUbuntuPackages "${version}"
             _installUbuntuCleanUp
         fi
         if [[ "${option}" == "common" || "${option}" == "all" ]]; then
