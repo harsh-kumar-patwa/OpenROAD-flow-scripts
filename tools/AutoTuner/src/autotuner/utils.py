@@ -183,8 +183,6 @@ def parse_flow_variables(base_dir, platform):
     Parse the flow variables from source
     - Code: Makefile `vars` target output
 
-    TODO: Tests.
-
     Output:
     - flow_variables: set of flow variables
     """
@@ -218,7 +216,6 @@ def parse_flow_variables(base_dir, platform):
 def parse_tunable_variables():
     """
     Parse the tunable variables from variables.yaml
-    TODO: Tests.
     """
     cur_path = os.path.dirname(os.path.realpath(__file__))
     vars_path = os.path.join(cur_path, "../../../../flow/scripts/variables.yaml")
